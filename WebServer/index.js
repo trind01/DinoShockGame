@@ -16,7 +16,9 @@ app.get('/', function(req,res){
 })
 
 app.post('/gameover', function(req,res){
-	serialport.write("F");
+	serialport.write("F",function(err){
+		console.log(err);
+	});
 	res.end("It worked");
 })
 
