@@ -2,14 +2,16 @@
 #include <BleKeyboard.h>
 #include "BluetoothSerial.h"
 
+//Bluetooth instances
 BleKeyboard bleKeyboard;
 BluetoothSerial ESP_BT; //Object for Bluetooth
 
+//Button vars. Button is active low
 const byte BOOT_BUTTON_PIN = 0;
-bool ButtonPressed();
 bool start_game = false;
 void ButtonInterrupt();
 
+//Accelerometer vars
 const byte MPU_ADDR = 0x68;
 int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
 int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
@@ -20,61 +22,75 @@ char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, r
   return tmp_str;
 }
 
+//Relay Vars
+const byte RELAY_PIN = 2;
+void SetRelay(bool state);
+bool relayState = false;
+
 void setup() {
-  // put your setup code here, to run once:
+
+  //Set up Button and relay
   pinMode(BOOT_BUTTON_PIN,INPUT);
+  pinMode(RELAY_PIN,OUTPUT);
+  
+  //Set Up Serial
   Serial.begin(115200);
+
+  //Set up Accelerometer
   Wire.begin();
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x6B);
   Wire.write(0);
   Wire.endTransmission(true);
 
+  //Set up Bluetooth Keyboard and Serial
   ESP_BT.begin("ESP32_Dino_Game"); //Name of your Bluetooth Signal
   bleKeyboard.begin();
 
+  //Set up Interrupt for button
   attachInterrupt(BOOT_BUTTON_PIN, ButtonInterrupt, FALLING);
 }
 
 void loop() {
-  try{
-    if(start_game)
-    {
-      getMPUReadings();
-    }
   if(start_game)
+  {
+    getMPUReadings(); //Check if we are doing a movement
+    if(isDuck())
     {
-      if(isDuck())
-      {
-        Duck();
-      }
-      else if(isJump())
-      {
-        Jump();
-      }
+      Duck();
     }
-    if (ESP_BT.available()) //Check if we receive anything from Bluetooth
+    else if(isJump())
     {
-      char incoming = ESP_BT.read(); //Read what we recevive
-      if(incoming == 'F')
-      {
-        bleKeyboard.releaseAll();
-        start_game = false;
-      }
-      Serial.println(incoming);
+      Jump();
     }
   }
-  catch(int e)
+  if (ESP_BT.available()) //Check if we receive anything from Bluetooth
   {
-    Serial.print("ERR: "); Serial.println(e);
+    char incoming = ESP_BT.read(); //Read what we recevive
+//    if(incoming == 'F') //We lost
+//    {
+      bleKeyboard.releaseAll();
+      start_game = false;
+      SetRelay(true);
+      delay(2000);
+      SetRelay(false);
+//    }
+    Serial.println(incoming);
   }
   delay(100);
 }
 
-
-bool ButtonPressed()
+void SetRelay(bool state)
 {
-  return !digitalRead(BOOT_BUTTON_PIN);
+  digitalWrite(RELAY_PIN,state);
+}
+
+void ButtonInterrupt()
+{
+  start_game = !start_game;
+//  relayState = !relayState;
+//  SetRelay(relayState);
+  SetRelay(false);
 }
 
 void getMPUReadings()
@@ -105,14 +121,12 @@ void getMPUReadings()
 //  Serial.println();
 }
 
-void ButtonInterrupt()
-{
-  start_game = !start_game;
-}
-
+///////////////////////////////////////////////////////////
+/////////////////////Control Functions/////////////////////
+///////////////////////////////////////////////////////////
 bool isDuck()
 {
-  return (gyro_x < -15000 && accelerometer_z < 3000);
+  return (gyro_x > 10000 && accelerometer_z < -1000);
 }
 
 bool isJump()
@@ -121,7 +135,7 @@ bool isJump()
   {
     return false;
   }
-  return (accelerometer_y < -25,000 || accelerometer_y > -7000);
+  return (accelerometer_y > 19000);
 }
 
 void Jump()
